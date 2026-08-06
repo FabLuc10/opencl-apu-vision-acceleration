@@ -1,0 +1,54 @@
+#pragma once
+#define CL_HPP_TARGET_OPENCL_VERSION 200
+#define CL_HPP_ENABLE_EXCEPTIONS    //abilitazione delle eccezioni C++ per OpenCL 
+#include <CL/opencl.hpp>
+#include <opencv2/opencv.hpp>
+#include <string>
+
+
+class OpenCLManager {
+
+    private:
+        cl::Context context;
+        cl::Device device;
+        cl::CommandQueue queue;
+
+        // creazione di un Program per ogni file .cl 
+        cl::Program prog_filtri;
+        cl::Program prog_morfologia;
+        cl::Program prog_geometria;
+
+
+        // funzione ausilaria per leggere un file .cl 
+        std::string readFile(const std::string& filename);
+
+    public:
+        OpenCLManager(); //costruttore
+        ~OpenCLManager(); //distruttore 
+
+        // metodo per compilare i file .cl a runtime 
+        void buildPrograms(const std::string& path_filtri, const std::string& path_morfologia, const std::string& path_geometria);
+
+        // Metodi per GPU standard 
+        void runSobelStandard(const cv::Mat& input, cv::Mat& output);
+        void runBlurStandard(const cv::Mat& input, cv::Mat& output);
+        void runErosionStandard(const cv::Mat& input, cv::Mat& output);
+        void runDilationStandard(const cv::Mat& input, cv::Mat& output);
+        void runTraslationStandard(const cv::Mat& input, cv::Mat& output, int dx, int dy);
+        void runRotationStandard(const cv::Mat& input, cv::Mat& output, float grado_rotazione);
+        void runScalingStandard(const cv::Mat& input, cv::Mat& output, float scala);
+        
+
+        // metodi per GPU zero-copy 
+        void runSobelZero(const cv::Mat& input, cv::Mat& output);
+        void runBlurZero(const cv::Mat& input, cv::Mat& output);
+        void runErosionZero(const cv::Mat& input, cv::Mat& output);
+        void runDilationZero(const cv::Mat& input, cv::Mat& output);
+        void runTraslationZero(const cv::Mat& input, cv::Mat& output, int dx, int dy);
+        void runRotationZero(const cv::Mat& input, cv::Mat& output, float grado_rotazione);
+        void runScalingZero(const cv::Mat& input, cv::Mat& output, float scala);
+
+
+
+};
+
