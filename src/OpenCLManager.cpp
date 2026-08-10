@@ -210,3 +210,101 @@ void OpenCLManager::runBlurStandard(const cv::Mat& input, cv::Mat& output)
     
 }
 
+void OpenCLManager::runErosionStandard(const cv::Mat& input, cv::Mat& output)
+{
+    try{
+        if(output.size()!=input.size() || output.empty() || input.type()!=output.type())
+            output = cv::Mat(input.size(), input.type());
+
+        size_t dim = input.total()*input.elemSize();
+
+        allocaBuffer(dim);
+
+        queue.enqueueWriteBuffer(input_gpu,CL_TRUE,0,dim,input.data);
+        
+        cl::Kernel kernel_erosion(prog_morfologia,"erosion");   
+        int rows = input.rows;
+        int cols = input.cols;
+        kernel_erosion.setArg(0,input_gpu);
+        kernel_erosion.setArg(1,output_gpu);
+        kernel_erosion.setArg(2,rows);
+        kernel_erosion.setArg(3,cols);
+
+        cl::NDRange global_size(cols,rows);
+
+        queue.enqueueNDRangeKernel(kernel_erosion,cl::NullRange,global_size);
+
+        queue.enqueueReadBuffer(output_gpu,CL_TRUE,0,dim,output.data);
+    } catch(const cl::Error& e)
+    {
+        cerr << "Errore OpenCL in runErosionStandard: " << e.what() << " (" << e.err() << ")" << endl;    
+    }
+
+}
+
+void OpenCLManager::runDilationStandard(const cv::Mat& input, cv::Mat& output)
+{
+    try{
+        if(output.empty() || input.size()!=output.size() || input.type()!=output.type())
+            output = cv::Mat(input.size(),input.type());
+        
+        size_t dim = input.total()*input.elemSize();
+        allocaBuffer(dim);
+
+        queue.enqueueWriteBuffer(input_gpu,CL_TRUE,0,dim,input.data);
+
+        cl::Kernel kernel_dilation(prog_morfologia,"dilation");
+        int rows = input.rows;
+        int cols = input.cols;
+        kernel_dilation.setArg(0,input_gpu);
+        kernel_dilation.setArg(1,output_gpu);
+        kernel_dilation.setArg(2,rows);
+        kernel_dilation.setArg(3,cols);
+
+        cl::NDRange global_size(cols,rows);
+        
+        queue.enqueueNDRangeKernel(kernel_dilation,cl::NullRange,global_size);
+
+        queue.enqueueReadBuffer(output_gpu,CL_TRUE,0,dim,output.data);
+    } catch(const cl::Error& e)
+    {
+        cerr << "Errore OpenCL in runDilationStandard: " << e.what() << " (" << e.err() << ")" << endl;    
+
+    }
+}
+
+void OpenCLManager::runTranslationStandard(const cv::Mat& input, cv::Mat& output, int dx, int dy)
+{
+    try
+    {
+        if(output.empty() || input.size()!=output.size() || input.type()!=output.type())
+            output = cv::Mat(input.size(),input.type());
+
+        size_t dim = input.total()*input.elemSize();
+
+        allocaBuffer(dim);
+
+        queue.enqueueWriteBuffer(input_gpu,CL_TRUE,0,dim,input.data);
+        
+        cl::Kernel kernel_translation(prog_geometria,"translation");
+        int rows = input.rows;
+        int cols = input.cols;
+        kernel_translation.setArg(0,input_gpu);
+        kernel_translation.setArg(1,output_gpu);
+        kernel_translation.setArg(2,rows);
+        kernel_translation.setArg(3,cols);
+        kernel_translation.setArg(4,dx);
+        kernel_translation.setArg(5,dy);
+
+        cl::NDRange global_size(cols,rows);
+
+        queue.enqueueNDRangeKernel(kernel_translation,cl::NullRange,global_size);
+
+        queue.enqueueReadBuffer(output_gpu,CL_TRUE,0,dim,output.data);
+    }
+    catch(const cl::Error& e)
+    {
+        cerr << "Errore OpenCL in runTranslationStandard: " << e.what() << " (" << e.err() << ")" << endl;    
+    }
+    
+}

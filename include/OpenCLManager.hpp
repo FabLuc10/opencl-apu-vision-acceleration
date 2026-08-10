@@ -1,5 +1,5 @@
 #pragma once
-#define CL_HPP_TARGET_OPENCL_VERSION 200
+#define CL_HPP_TARGET_OPENCL_VERSION 300
 #define CL_HPP_ENABLE_EXCEPTIONS    //abilitazione delle eccezioni C++ per OpenCL 
 #include <CL/opencl.hpp>
 #include <opencv2/opencv.hpp>
@@ -43,7 +43,7 @@ class OpenCLManager {
         void runBlurStandard(const cv::Mat& input, cv::Mat& output);
         void runErosionStandard(const cv::Mat& input, cv::Mat& output);
         void runDilationStandard(const cv::Mat& input, cv::Mat& output);
-        void runTraslationStandard(const cv::Mat& input, cv::Mat& output, int dx, int dy);
+        void runTranslationStandard(const cv::Mat& input, cv::Mat& output, int dx, int dy);
         void runRotationStandard(const cv::Mat& input, cv::Mat& output, float grado_rotazione);
         void runScalingStandard(const cv::Mat& input, cv::Mat& output, float scala);
         
@@ -53,7 +53,7 @@ class OpenCLManager {
         void runBlurZero(const cv::Mat& input, cv::Mat& output);
         void runErosionZero(const cv::Mat& input, cv::Mat& output);
         void runDilationZero(const cv::Mat& input, cv::Mat& output);
-        void runTraslationZero(const cv::Mat& input, cv::Mat& output, int dx, int dy);
+        void runTranslationZero(const cv::Mat& input, cv::Mat& output, int dx, int dy);
         void runRotationZero(const cv::Mat& input, cv::Mat& output, float grado_rotazione);
         void runScalingZero(const cv::Mat& input, cv::Mat& output, float scala);
 
