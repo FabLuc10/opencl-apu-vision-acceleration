@@ -1,5 +1,5 @@
 #pragma once
-#define CL_HPP_TARGET_OPENCL_VERSION 300
+#define CL_HPP_TARGET_OPENCL_VERSION 200
 #define CL_HPP_ENABLE_EXCEPTIONS    //abilitazione delle eccezioni C++ per OpenCL 
 #include <CL/opencl.hpp>
 #include <opencv2/opencv.hpp>
@@ -23,6 +23,18 @@ class OpenCLManager {
         cl::Buffer output_gpu;
         cl::Buffer temp_gpu;
         size_t ultima_dim=0;
+
+        // kernels 
+        cl::Kernel kernel_sobel;
+        cl::Kernel kernel_blur_x;
+        cl::Kernel kernel_blur_y;
+        cl::Kernel kernel_erosion;
+        cl::Kernel kernel_dilation;
+        cl::Kernel kernel_translation;
+        cl::Kernel kernel_rotation;
+        cl::Kernel kernel_scaling;
+
+
 
 
         // funzione ausilaria per leggere un file .cl 

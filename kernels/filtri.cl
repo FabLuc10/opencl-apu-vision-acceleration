@@ -2,7 +2,13 @@
 // si sfrutta la proprietà di separabilità della gaussiana per avere ottimizzazione computazionale
 // complessità per pixel passa da O(N^2) a O(2N)
 
-__constant float vettore_pesi[5] = {1.0f/16, 4.0f/16, 6.0f/16, 4.0f/16, 1.0f/16};  // pesi binomiali normalizzati che approssimano la funzione gaussiana 
+__constant float vettore_pesi[21] = {
+    1.0f/1048576, 20.0f/1048576, 190.0f/1048576, 1140.0f/1048576, 
+    4845.0f/1048576, 15504.0f/1048576, 38760.0f/1048576, 77520.0f/1048576, 
+    125970.0f/1048576, 167960.0f/1048576, 184756.0f/1048576, 167960.0f/1048576, 
+    125970.0f/1048576, 77520.0f/1048576, 38760.0f/1048576, 15504.0f/1048576, 
+    4845.0f/1048576, 1140.0f/1048576, 190.0f/1048576, 20.0f/1048576, 1.0f/1048576
+}; // pesi binomiali normalizzati che approssimano la funzione gaussiana 
 
 __kernel void blur_x(__global const uchar* input, __global uchar* output, int rows, int cols)
 {
@@ -12,10 +18,10 @@ __kernel void blur_x(__global const uchar* input, __global uchar* output, int ro
     if(x>=cols || y>=rows) return;
 
     float somma = 0.0f;
-    for(int k=-2; k<=2;k++)
+    for(int k=-10; k<=10;k++)
     {
         int index = clamp(x+k,0,cols-1); // se coordinata x+k va sotto 0 viene forzata a 0, se va sopra cols-1 viene forzata a cols-1 
-        somma += input[y*cols+index] * vettore_pesi[k+2];  // convoluzine spaziale 
+        somma += input[y*cols+index] * vettore_pesi[k+10];  // convoluzione spaziale 
     }
 
     output[y*cols+x] = (uchar) clamp(somma,0.0f,255.0f);
@@ -29,10 +35,10 @@ __kernel void blur_y(__global const uchar* input, __global uchar* output, int ro
     if(x>=cols || y>=rows) return;
 
     float somma = 0.0f;
-    for(int k=-2; k<=2;k++)
+    for(int k=-10; k<=10;k++)
     {
         int index = clamp(y+k,0,rows-1);  
-        somma += input[index*cols+x] * vettore_pesi[k+2];  
+        somma += input[index*cols+x] * vettore_pesi[k+10];  
     }
 
     output[y*cols+x] = (uchar) clamp(somma,0.0f,255.0f);
@@ -86,7 +92,7 @@ __kernel void sobel(__global const uchar* input, __global uchar* output, int row
     int gy = (p00+2*p01+p02)-(p20+2*p21+p22);
 
     // calcolo magnitudo approssimato 
-    int magnitudo = clamp(abs(gx)+abs(gy),0,255);
+    int magnitudo = clamp((int)(abs(gx)+abs(gy)),0,255);
 
     output[y*cols+x] = (uchar)magnitudo;
 }

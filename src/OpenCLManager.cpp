@@ -80,7 +80,17 @@ void OpenCLManager::buildPrograms(const std::string& path_filtri, const std::str
         prog_geometria.build({device});
         prog_morfologia.build({device});
 
-        cout<<"[OPENCL] kernel compilati con successo"<<endl;
+        // estrazione dei kernels
+        kernel_blur_x = cl::Kernel(prog_filtri,"blur_x");
+        kernel_blur_y = cl::Kernel(prog_filtri,"blur_y");
+        kernel_sobel = cl::Kernel(prog_filtri,"sobel");
+        kernel_dilation = cl::Kernel(prog_morfologia,"dilation");
+        kernel_erosion = cl::Kernel(prog_morfologia,"erosion");
+        kernel_translation = cl::Kernel(prog_geometria,"translation");
+        kernel_rotation = cl::Kernel(prog_geometria,"rotation");
+        kernel_scaling = cl::Kernel(prog_geometria,"scaling");
+
+        cout<<"[OPENCL] kernel compilati ed estratti con successo"<<endl;
 
     }
     catch(const cl::Error& e)
@@ -136,9 +146,6 @@ void OpenCLManager::runSobelStandard(const cv::Mat& input, cv::Mat& output)
         //CL_TRUE indica trasferimento dati bloccante
         queue.enqueueWriteBuffer(input_gpu, CL_TRUE, 0, dim, input.data);
 
-        // estrazione kernel dall'oggetto Program 
-        cl::Kernel kernel_sobel(prog_filtri, "sobel");
-
         int rows = input.rows;
         int cols = input.cols;
         kernel_sobel.setArg(0,input_gpu);
@@ -176,7 +183,6 @@ void OpenCLManager::runBlurStandard(const cv::Mat& input, cv::Mat& output)
         
         // esecuzione primo kernel orizzontale 
         queue.enqueueWriteBuffer(input_gpu,CL_TRUE,0,dim,input.data);
-        cl::Kernel kernel_blur_x(prog_filtri,"blur_x");
 
         int rows = input.rows;
         int cols = input.cols;
@@ -190,7 +196,6 @@ void OpenCLManager::runBlurStandard(const cv::Mat& input, cv::Mat& output)
         queue.enqueueNDRangeKernel(kernel_blur_x,cl::NullRange,global_size);
 
         // esecuzione secondo kernel verticale 
-        cl::Kernel kernel_blur_y(prog_filtri,"blur_y");
         kernel_blur_y.setArg(0,temp_gpu);
         kernel_blur_y.setArg(1,output_gpu);
         kernel_blur_y.setArg(2,rows);
@@ -222,7 +227,6 @@ void OpenCLManager::runErosionStandard(const cv::Mat& input, cv::Mat& output)
 
         queue.enqueueWriteBuffer(input_gpu,CL_TRUE,0,dim,input.data);
         
-        cl::Kernel kernel_erosion(prog_morfologia,"erosion");   
         int rows = input.rows;
         int cols = input.cols;
         kernel_erosion.setArg(0,input_gpu);
@@ -253,7 +257,6 @@ void OpenCLManager::runDilationStandard(const cv::Mat& input, cv::Mat& output)
 
         queue.enqueueWriteBuffer(input_gpu,CL_TRUE,0,dim,input.data);
 
-        cl::Kernel kernel_dilation(prog_morfologia,"dilation");
         int rows = input.rows;
         int cols = input.cols;
         kernel_dilation.setArg(0,input_gpu);
@@ -286,7 +289,6 @@ void OpenCLManager::runTranslationStandard(const cv::Mat& input, cv::Mat& output
 
         queue.enqueueWriteBuffer(input_gpu,CL_TRUE,0,dim,input.data);
         
-        cl::Kernel kernel_translation(prog_geometria,"translation");
         int rows = input.rows;
         int cols = input.cols;
         kernel_translation.setArg(0,input_gpu);
@@ -307,4 +309,69 @@ void OpenCLManager::runTranslationStandard(const cv::Mat& input, cv::Mat& output
         cerr << "Errore OpenCL in runTranslationStandard: " << e.what() << " (" << e.err() << ")" << endl;    
     }
     
+}
+
+void OpenCLManager::runRotationStandard(const cv::Mat& input, cv::Mat& output, float grado_rotazione)
+{
+    try
+    {
+        if(output.empty() || input.size()!=output.size() || input.type()!=output.type())
+            output = cv::Mat(input.size(),input.type());
+
+        size_t dim = input.total()*input.elemSize();
+
+        allocaBuffer(dim);
+
+        queue.enqueueWriteBuffer(input_gpu,CL_TRUE,0,dim,input.data);
+        
+        int rows = input.rows;
+        int cols = input.cols;
+        kernel_rotation.setArg(0,input_gpu);
+        kernel_rotation.setArg(1,output_gpu);
+        kernel_rotation.setArg(2,rows);
+        kernel_rotation.setArg(3,cols);
+        kernel_rotation.setArg(4,grado_rotazione);
+        cl::NDRange global_size(cols,rows);
+
+        queue.enqueueNDRangeKernel(kernel_rotation,cl::NullRange,global_size);
+
+        queue.enqueueReadBuffer(output_gpu,CL_TRUE,0,dim,output.data);
+    }
+    catch(const cl::Error& e)
+    {
+        cerr << "Errore OpenCL in runRotationStandard: " << e.what() << " (" << e.err() << ")" << endl;    
+    }
+}
+
+
+void OpenCLManager::runScalingStandard(const cv::Mat& input, cv::Mat& output, float scala)
+{
+    try
+    {
+        if(output.empty() || input.size()!=output.size() || input.type()!=output.type())
+            output = cv::Mat(input.size(),input.type());
+
+        size_t dim = input.total()*input.elemSize();
+
+        allocaBuffer(dim);
+
+        queue.enqueueWriteBuffer(input_gpu,CL_TRUE,0,dim,input.data);
+        
+        int rows = input.rows;
+        int cols = input.cols;
+        kernel_scaling.setArg(0,input_gpu);
+        kernel_scaling.setArg(1,output_gpu);
+        kernel_scaling.setArg(2,rows);
+        kernel_scaling.setArg(3,cols);
+        kernel_scaling.setArg(4,scala);
+        cl::NDRange global_size(cols,rows);
+
+        queue.enqueueNDRangeKernel(kernel_scaling,cl::NullRange,global_size);
+
+        queue.enqueueReadBuffer(output_gpu,CL_TRUE,0,dim,output.data);
+    }
+    catch(const cl::Error& e)
+    {
+        cerr << "Errore OpenCL in runScalingStandard: " << e.what() << " (" << e.err() << ")" << endl;    
+    }
 }
