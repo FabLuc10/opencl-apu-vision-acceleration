@@ -18,11 +18,19 @@ class OpenCLManager {
         cl::Program prog_morfologia;
         cl::Program prog_geometria;
 
-        // allocazione buffer 
+        // allocazione buffer per metodo standard e zero-copy
         cl::Buffer input_gpu;
         cl::Buffer output_gpu;
         cl::Buffer temp_gpu;
+
+        cl::Buffer input_gpu_zero;
+        cl::Buffer output_gpu_zero;
+        cl::Buffer temp_gpu_zero;
+
         size_t ultima_dim=0;
+        size_t ultima_dim_zero=0;
+        void* ultimo_ptr_in = nullptr;
+        void* ultimo_ptr_out = nullptr;
 
         // kernels 
         cl::Kernel kernel_sobel;
@@ -34,14 +42,13 @@ class OpenCLManager {
         cl::Kernel kernel_rotation;
         cl::Kernel kernel_scaling;
 
-
-
-
+        
         // funzione ausilaria per leggere un file .cl 
         std::string readFile(const std::string& filename);
 
-        // funzione ausiliaria che alloca buffer solo se la dimensione cambia 
+        // funzioni ausiliarie che allocano buffer 
         void allocaBuffer(size_t dim);
+        void allocaBufferZero(const cv::Mat& input, cv::Mat& output);
 
     public:
         OpenCLManager(); //costruttore

@@ -130,6 +130,28 @@ void OpenCLManager::allocaBuffer(size_t dim)
     ultima_dim = dim;
 }
 
+void OpenCLManager::allocaBufferZero(const cv::Mat& input, cv::Mat& output)
+{
+    size_t dim = input.total() * input.elemSize();
+
+    if(dim!=ultima_dim_zero || input.data!=ultimo_ptr_in || output.data!=ultimo_ptr_out)
+    {
+        // il flag CL_MEM_USE_HOST_PTR permette di creare un buffer che punta a uno spazio di memoria già allocato su CPU 
+        input_gpu_zero = cl::Buffer(context,CL_MEM_READ_ONLY|CL_MEM_USE_HOST_PTR,dim,input.data);
+        output_gpu_zero = cl::Buffer(context,CL_MEM_WRITE_ONLY|CL_MEM_USE_HOST_PTR,dim,output.data);
+
+        // il buffer temporaneo allocato su GPU 
+        temp_gpu_zero = cl::Buffer(context,CL_MEM_READ_WRITE,dim);
+
+        ultima_dim_zero = dim;
+        ultimo_ptr_in = input.data;
+        ultimo_ptr_out = output.data;
+    }
+}
+
+
+// METODI STANDARD 
+
 void OpenCLManager::runSobelStandard(const cv::Mat& input, cv::Mat& output)
 {
     try
@@ -373,5 +395,266 @@ void OpenCLManager::runScalingStandard(const cv::Mat& input, cv::Mat& output, fl
     catch(const cl::Error& e)
     {
         cerr << "Errore OpenCL in runScalingStandard: " << e.what() << " (" << e.err() << ")" << endl;    
+    }
+}
+
+
+// METODI ZERO-COPY: si fa in modo che CPU e GPU non mantengano due copie della stessa immagine su cui lavorare
+
+void OpenCLManager::runSobelZero(const cv::Mat& input, cv::Mat& output)
+{
+    try{
+        if(output.empty() || input.size()!=output.size() || input.type()!=output.type())
+            output = cv::Mat(input.size(), input.type());
+        
+        allocaBufferZero(input,output);
+
+        size_t dim = input.total()*input.elemSize();
+
+        /*
+            pattern per sincronizzazione zero-copy tra GPU e CPU
+            l'operazione di Map con CL_MAP_WRITE_INVALIDATE_REGION serve alla CPU a prendere il controllo del buffer
+            e a invalidare la cache GPU, risparmiando il tempo dovuto al flush delle cache GPU verso RAM.
+            l'Unmap forza la CPU a fare il flush delle cache verso la RAM passando il controllo del buffer alla GPU 
+            che andrà a leggere dalla RAM dati sicuramente aggiornati   
+        */
+        void* ptr_in = queue.enqueueMapBuffer(input_gpu_zero,CL_TRUE,CL_MAP_WRITE_INVALIDATE_REGION,0,dim);
+        queue.enqueueUnmapMemObject(input_gpu_zero, ptr_in);
+
+        int rows = input.rows;
+        int cols = input.cols;
+
+        kernel_sobel.setArg(0,input_gpu_zero);
+        kernel_sobel.setArg(1,output_gpu_zero);
+        kernel_sobel.setArg(2,rows);
+        kernel_sobel.setArg(3,cols);
+
+        cl::NDRange global_size(cols,rows);
+        queue.enqueueNDRangeKernel(kernel_sobel,cl::NullRange,global_size);
+
+        /*
+            Map con il flag CL_MAP_READ permette il flush delle cache GPU verso la RAM e invalida le cache CPU in modo tale 
+            che la CPU sia costretta ad andare a leggere i dati aggiornati dalla GPU su RAM.
+            L'Unmap passa il controllo del buffer alla GPU
+        */
+        void* ptr_out = queue.enqueueMapBuffer(output_gpu_zero, CL_TRUE, CL_MAP_READ, 0, dim);
+        queue.enqueueUnmapMemObject(output_gpu_zero, ptr_out);
+
+    } catch(const cl::Error& e)
+    {
+        cerr << "Errore OpenCL in runSobelZero: " << e.what() << " (" << e.err() << ")" << endl;
+    }
+
+}
+
+void OpenCLManager::runBlurZero(const cv::Mat& input, cv::Mat& output)
+{
+    try
+    {  
+        if(output.empty() || input.size()!=output.size() || input.type()!=output.type())
+            output = cv::Mat(input.size(), input.type());
+        
+        allocaBufferZero(input,output);
+
+        size_t dim = input.total()*input.elemSize();
+        void* ptr_in = queue.enqueueMapBuffer(input_gpu_zero,CL_TRUE,CL_MAP_WRITE_INVALIDATE_REGION,0,dim);
+        queue.enqueueUnmapMemObject(input_gpu_zero, ptr_in);
+
+        int rows = input.rows;
+        int cols = input.cols;
+        cl::NDRange global_size(cols,rows);
+
+        // esecuzione primo kernel
+        kernel_blur_x.setArg(0,input_gpu_zero);
+        kernel_blur_x.setArg(1,temp_gpu_zero);
+        kernel_blur_x.setArg(2,rows);
+        kernel_blur_x.setArg(3,cols);
+        queue.enqueueNDRangeKernel(kernel_blur_x, cl::NullRange, global_size);
+
+        // esecuzione secondo kernel
+        kernel_blur_y.setArg(0, temp_gpu_zero);
+        kernel_blur_y.setArg(1, output_gpu_zero);
+        kernel_blur_y.setArg(2, rows);
+        kernel_blur_y.setArg(3, cols);
+
+        queue.enqueueNDRangeKernel(kernel_blur_y, cl::NullRange, global_size);
+
+        void* ptr_out = queue.enqueueMapBuffer(output_gpu_zero, CL_TRUE, CL_MAP_READ, 0, dim);
+        queue.enqueueUnmapMemObject(output_gpu_zero, ptr_out);
+    }
+    catch(const cl::Error& e)
+    {
+        cerr << "Errore OpenCL in runBlurZero: " << e.what() << " (" << e.err() << ")" << endl;
+    }
+    
+}
+
+void OpenCLManager::runErosionZero(const cv::Mat& input, cv::Mat& output)
+{
+    try{
+        if(output.empty() || input.size()!=output.size() || input.type()!=output.type())
+            output = cv::Mat(input.size(), input.type());
+        
+        allocaBufferZero(input,output);
+
+        size_t dim = input.total()*input.elemSize();
+        void* ptr_in = queue.enqueueMapBuffer(input_gpu_zero,CL_TRUE,CL_MAP_WRITE_INVALIDATE_REGION,0,dim);
+        queue.enqueueUnmapMemObject(input_gpu_zero, ptr_in);
+
+        int rows = input.rows;
+        int cols = input.cols;
+
+        kernel_erosion.setArg(0,input_gpu_zero);
+        kernel_erosion.setArg(1,output_gpu_zero);
+        kernel_erosion.setArg(2,rows);
+        kernel_erosion.setArg(3,cols);
+
+        cl::NDRange global_size(cols,rows);
+        queue.enqueueNDRangeKernel(kernel_erosion,cl::NullRange,global_size);
+
+        void* ptr_out = queue.enqueueMapBuffer(output_gpu_zero, CL_TRUE, CL_MAP_READ, 0, dim);
+        queue.enqueueUnmapMemObject(output_gpu_zero, ptr_out);
+
+    } catch(const cl::Error& e)
+    {
+        cerr << "Errore OpenCL in runErosionZero: " << e.what() << " (" << e.err() << ")" << endl;
+    }
+    
+}
+void OpenCLManager::runDilationZero(const cv::Mat& input, cv::Mat& output)
+{
+    try{
+        if(output.empty() || input.size()!=output.size() || input.type()!=output.type())
+            output = cv::Mat(input.size(), input.type());
+        
+        allocaBufferZero(input,output);
+
+        size_t dim = input.total()*input.elemSize();
+        void* ptr_in = queue.enqueueMapBuffer(input_gpu_zero,CL_TRUE,CL_MAP_WRITE_INVALIDATE_REGION,0,dim);
+        queue.enqueueUnmapMemObject(input_gpu_zero, ptr_in);
+
+        int rows = input.rows;
+        int cols = input.cols;
+
+        kernel_dilation.setArg(0,input_gpu_zero);
+        kernel_dilation.setArg(1,output_gpu_zero);
+        kernel_dilation.setArg(2,rows);
+        kernel_dilation.setArg(3,cols);
+
+        cl::NDRange global_size(cols,rows);
+        
+        queue.enqueueNDRangeKernel(kernel_dilation,cl::NullRange,global_size);
+
+        void* ptr_out = queue.enqueueMapBuffer(output_gpu_zero, CL_TRUE, CL_MAP_READ, 0, dim);
+        queue.enqueueUnmapMemObject(output_gpu_zero, ptr_out);
+
+    } catch(const cl::Error& e)
+    {
+        cerr << "Errore OpenCL in runDilationZero: " << e.what() << " (" << e.err() << ")" << endl;
+    }
+}
+void OpenCLManager::runTranslationZero(const cv::Mat& input, cv::Mat& output, int dx, int dy)
+{
+    try
+    {
+        if(output.empty() || input.size()!=output.size() || input.type()!=output.type())
+            output = cv::Mat(input.size(),input.type());
+
+        allocaBufferZero(input,output);
+
+        size_t dim = input.total()*input.elemSize();
+        void* ptr_in = queue.enqueueMapBuffer(input_gpu_zero,CL_TRUE,CL_MAP_WRITE_INVALIDATE_REGION,0,dim);
+        queue.enqueueUnmapMemObject(input_gpu_zero, ptr_in);
+
+        int rows = input.rows;
+        int cols = input.cols;
+        
+        kernel_translation.setArg(0,input_gpu_zero);
+        kernel_translation.setArg(1,output_gpu_zero);
+        kernel_translation.setArg(2,rows);
+        kernel_translation.setArg(3,cols);
+        kernel_translation.setArg(4,dx); 
+        kernel_translation.setArg(5,dy);
+
+        cl::NDRange global_size(cols,rows);
+
+        queue.enqueueNDRangeKernel(kernel_translation,cl::NullRange,global_size);
+
+        void* ptr_out = queue.enqueueMapBuffer(output_gpu_zero, CL_TRUE, CL_MAP_READ, 0, dim);
+        queue.enqueueUnmapMemObject(output_gpu_zero, ptr_out);
+    }
+    catch(const cl::Error& e)
+    {
+        cerr << "Errore OpenCL in runTranslationZero: " << e.what() << " (" << e.err() << ")" << endl;    
+    }
+}
+
+void OpenCLManager::runRotationZero(const cv::Mat& input, cv::Mat& output, float grado_rotazione)
+{
+    try
+    {
+        if(output.empty() || input.size()!=output.size() || input.type()!=output.type())
+            output = cv::Mat(input.size(),input.type());
+
+        allocaBufferZero(input,output);
+
+        size_t dim = input.total()*input.elemSize();
+        void* ptr_in = queue.enqueueMapBuffer(input_gpu_zero,CL_TRUE,CL_MAP_WRITE_INVALIDATE_REGION,0,dim);
+        queue.enqueueUnmapMemObject(input_gpu_zero, ptr_in);
+        
+        int rows = input.rows;
+        int cols = input.cols;
+        
+        kernel_rotation.setArg(0,input_gpu_zero);
+        kernel_rotation.setArg(1,output_gpu_zero);
+        kernel_rotation.setArg(2,rows);
+        kernel_rotation.setArg(3,cols);
+        kernel_rotation.setArg(4,grado_rotazione); 
+
+        cl::NDRange global_size(cols,rows);
+
+        queue.enqueueNDRangeKernel(kernel_rotation,cl::NullRange,global_size);
+
+        void* ptr_out = queue.enqueueMapBuffer(output_gpu_zero, CL_TRUE, CL_MAP_READ, 0, dim);
+        queue.enqueueUnmapMemObject(output_gpu_zero, ptr_out);
+    }
+    catch(const cl::Error& e)
+    {
+        cerr << "Errore OpenCL in runRotationZero: " << e.what() << " (" << e.err() << ")" << endl;    
+    }
+}
+
+void OpenCLManager::runScalingZero(const cv::Mat& input, cv::Mat& output, float scala)
+{
+    try
+    {
+        if(output.empty() || input.size()!=output.size() || input.type()!=output.type())
+            output = cv::Mat(input.size(),input.type());
+
+        allocaBufferZero(input,output);
+
+        size_t dim = input.total()*input.elemSize();
+        void* ptr_in = queue.enqueueMapBuffer(input_gpu_zero,CL_TRUE,CL_MAP_WRITE_INVALIDATE_REGION,0,dim);
+        queue.enqueueUnmapMemObject(input_gpu_zero, ptr_in);
+        
+        int rows = input.rows;
+        int cols = input.cols;
+        
+        kernel_scaling.setArg(0,input_gpu_zero);
+        kernel_scaling.setArg(1,output_gpu_zero);
+        kernel_scaling.setArg(2,rows);
+        kernel_scaling.setArg(3,cols);
+        kernel_scaling.setArg(4,scala); 
+
+        cl::NDRange global_size(cols,rows);
+
+        queue.enqueueNDRangeKernel(kernel_scaling,cl::NullRange,global_size);
+
+        void* ptr_out = queue.enqueueMapBuffer(output_gpu_zero, CL_TRUE, CL_MAP_READ, 0, dim);
+        queue.enqueueUnmapMemObject(output_gpu_zero, ptr_out);
+    }
+    catch(const cl::Error& e)
+    {
+        cerr << "Errore OpenCL in runScalingZero: " << e.what() << " (" << e.err() << ")" << endl;    
     }
 }
