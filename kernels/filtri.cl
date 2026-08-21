@@ -79,7 +79,7 @@ __kernel void sobel(__global const uchar* input, __global uchar* output, int row
     int p01 = input[inizio_riga_sopra+x];
     int p02 = input[inizio_riga_sopra+x+1];
 
-    // lettura riga in mezzo
+    // lettura riga di mezzo
     int p10 = input[inizio_riga_mezzo+x-1];
     int p12 = input[inizio_riga_mezzo+x+1];
 

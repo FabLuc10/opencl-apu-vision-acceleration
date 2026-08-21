@@ -50,6 +50,9 @@ class OpenCLManager {
         void allocaBuffer(size_t dim);
         void allocaBufferZero(const cv::Mat& input, cv::Mat& output);
 
+        // funzione per controllare che la matrice di output abbia la stessa dimensione e lo stesso tipo di quella di input
+        void controlloAllocazione(const cv::Mat& input, cv::Mat& output); 
+
     public:
         OpenCLManager(); //costruttore
         ~OpenCLManager(); //distruttore 

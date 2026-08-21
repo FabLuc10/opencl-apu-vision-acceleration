@@ -150,14 +150,21 @@ void OpenCLManager::allocaBufferZero(const cv::Mat& input, cv::Mat& output)
 }
 
 
+void OpenCLManager::controlloAllocazione(const cv::Mat& input, cv::Mat& output)
+{
+    if(output.empty() || input.size() != output.size() || input.type() != output.type()) {
+        output = cv::Mat(input.size(), input.type());
+    }
+}
+
+
 // METODI STANDARD 
 
 void OpenCLManager::runSobelStandard(const cv::Mat& input, cv::Mat& output)
 {
     try
     {
-        if(output.empty() || input.size()!=output.size() || input.type()!=output.type())
-            output = cv::Mat(input.size(), input.type());
+        controlloAllocazione(input,output);
         
         size_t dim = input.total() * input.elemSize();
         
@@ -196,8 +203,7 @@ void OpenCLManager::runBlurStandard(const cv::Mat& input, cv::Mat& output)
 {
     try
     {
-        if(output.empty() || input.size()!=output.size() || input.type()!=output.type())
-            output = cv::Mat(input.size(), input.type());
+        controlloAllocazione(input,output);
 
         size_t dim = input.total() * input.elemSize();
 
@@ -240,8 +246,7 @@ void OpenCLManager::runBlurStandard(const cv::Mat& input, cv::Mat& output)
 void OpenCLManager::runErosionStandard(const cv::Mat& input, cv::Mat& output)
 {
     try{
-        if(output.size()!=input.size() || output.empty() || input.type()!=output.type())
-            output = cv::Mat(input.size(), input.type());
+        controlloAllocazione(input,output);
 
         size_t dim = input.total()*input.elemSize();
 
@@ -271,8 +276,7 @@ void OpenCLManager::runErosionStandard(const cv::Mat& input, cv::Mat& output)
 void OpenCLManager::runDilationStandard(const cv::Mat& input, cv::Mat& output)
 {
     try{
-        if(output.empty() || input.size()!=output.size() || input.type()!=output.type())
-            output = cv::Mat(input.size(),input.type());
+        controlloAllocazione(input,output);
         
         size_t dim = input.total()*input.elemSize();
         allocaBuffer(dim);
@@ -302,8 +306,7 @@ void OpenCLManager::runTranslationStandard(const cv::Mat& input, cv::Mat& output
 {
     try
     {
-        if(output.empty() || input.size()!=output.size() || input.type()!=output.type())
-            output = cv::Mat(input.size(),input.type());
+        controlloAllocazione(input,output);
 
         size_t dim = input.total()*input.elemSize();
 
@@ -337,8 +340,7 @@ void OpenCLManager::runRotationStandard(const cv::Mat& input, cv::Mat& output, f
 {
     try
     {
-        if(output.empty() || input.size()!=output.size() || input.type()!=output.type())
-            output = cv::Mat(input.size(),input.type());
+        controlloAllocazione(input,output);
 
         size_t dim = input.total()*input.elemSize();
 
@@ -370,8 +372,7 @@ void OpenCLManager::runScalingStandard(const cv::Mat& input, cv::Mat& output, fl
 {
     try
     {
-        if(output.empty() || input.size()!=output.size() || input.type()!=output.type())
-            output = cv::Mat(input.size(),input.type());
+        controlloAllocazione(input,output);
 
         size_t dim = input.total()*input.elemSize();
 
@@ -404,8 +405,7 @@ void OpenCLManager::runScalingStandard(const cv::Mat& input, cv::Mat& output, fl
 void OpenCLManager::runSobelZero(const cv::Mat& input, cv::Mat& output)
 {
     try{
-        if(output.empty() || input.size()!=output.size() || input.type()!=output.type())
-            output = cv::Mat(input.size(), input.type());
+        controlloAllocazione(input,output);
         
         allocaBufferZero(input,output);
 
@@ -451,8 +451,7 @@ void OpenCLManager::runBlurZero(const cv::Mat& input, cv::Mat& output)
 {
     try
     {  
-        if(output.empty() || input.size()!=output.size() || input.type()!=output.type())
-            output = cv::Mat(input.size(), input.type());
+        controlloAllocazione(input,output);
         
         allocaBufferZero(input,output);
 
@@ -492,8 +491,7 @@ void OpenCLManager::runBlurZero(const cv::Mat& input, cv::Mat& output)
 void OpenCLManager::runErosionZero(const cv::Mat& input, cv::Mat& output)
 {
     try{
-        if(output.empty() || input.size()!=output.size() || input.type()!=output.type())
-            output = cv::Mat(input.size(), input.type());
+        controlloAllocazione(input,output);
         
         allocaBufferZero(input,output);
 
@@ -524,8 +522,7 @@ void OpenCLManager::runErosionZero(const cv::Mat& input, cv::Mat& output)
 void OpenCLManager::runDilationZero(const cv::Mat& input, cv::Mat& output)
 {
     try{
-        if(output.empty() || input.size()!=output.size() || input.type()!=output.type())
-            output = cv::Mat(input.size(), input.type());
+        controlloAllocazione(input,output);
         
         allocaBufferZero(input,output);
 
@@ -557,8 +554,7 @@ void OpenCLManager::runTranslationZero(const cv::Mat& input, cv::Mat& output, in
 {
     try
     {
-        if(output.empty() || input.size()!=output.size() || input.type()!=output.type())
-            output = cv::Mat(input.size(),input.type());
+        controlloAllocazione(input,output);
 
         allocaBufferZero(input,output);
 
@@ -593,8 +589,7 @@ void OpenCLManager::runRotationZero(const cv::Mat& input, cv::Mat& output, float
 {
     try
     {
-        if(output.empty() || input.size()!=output.size() || input.type()!=output.type())
-            output = cv::Mat(input.size(),input.type());
+        controlloAllocazione(input,output);
 
         allocaBufferZero(input,output);
 
@@ -628,8 +623,7 @@ void OpenCLManager::runScalingZero(const cv::Mat& input, cv::Mat& output, float 
 {
     try
     {
-        if(output.empty() || input.size()!=output.size() || input.type()!=output.type())
-            output = cv::Mat(input.size(),input.type());
+        controlloAllocazione(input,output);
 
         allocaBufferZero(input,output);
 
