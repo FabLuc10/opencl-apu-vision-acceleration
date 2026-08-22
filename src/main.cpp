@@ -1,5 +1,6 @@
 #include <iostream>
 #include <chrono> // libreria di timing ad alta precisione
+#include <iomanip>
 #include <opencv2/opencv.hpp>
 #include "OpenCLManager.hpp"
 #include "AlgoritmiCPU.hpp"
@@ -28,9 +29,9 @@ enum class Algoritmo{SOBEL, BLUR, EROSION, DILATION, TRANSLATION, ROTATION, SCAL
 enum class Modalita{CPU_MODE, GPU_STANDARD, GPU_ZERO};
 
 // parametri fissi per algoritmi 
-const int dx = 10;
-const int dy = -15;
-const float grado_rotazione = 90.0f;
+const int dx = 100;
+const int dy = -70;
+const float grado_rotazione = 37.0f;
 const float scala = 1.5f;
 
 
@@ -157,7 +158,7 @@ void apriCSV(const string& file_path, ofstream& csv)
     bool esiste = filesystem::exists(file_path);
     csv.open(file_path,ios::app);
     if(!esiste)
-        csv<<"algoritmo,modalita,risoluzione,fps_medi,tempo_medio_ms\n";
+        csv<<"algoritmo,modalita,risoluzione,fps_medi,tempo_medio_ms,timestamp\n";
 }
 
 int main()
@@ -190,6 +191,12 @@ int main()
     auto inizio_frame = chrono::high_resolution_clock::now(); // time point di inizio per calcolo degli FPS medi
     const int max_frame = 30; //dimensione del campione statistico
 
+    // crea una finestra ridimensionabile manualmente
+    namedWindow("Benchmark", WINDOW_NORMAL);
+
+    // fissiamo la dimensione della finestra 
+    resizeWindow("Benchmark", 1920, 540);
+
     cout<<"Premere ESC per terminare"<<endl;
 
     while(cap.read(frame_input))
@@ -213,21 +220,27 @@ int main()
 
         if(conta_frame==max_frame)
         {
-            double secondi = chrono::duration<double>(std::chrono::high_resolution_clock::now()-inizio_frame).count();
+            
+            double secondi = chrono::duration<double>(chrono::high_resolution_clock::now()-inizio_frame).count();
             double fps_medi = max_frame/secondi;
             double tempo_medio_ms = somma_tempo/conta_frame;
 
             cout << "[" << nomeAlgoritmo(algoritmo_scelto) << " | " << nomeModalita(mod_scelta) << "] "
                  << "FPS medi: " << fps_medi << " | tempo medio/frame: " << tempo_medio_ms << " ms" << endl;
 
+            auto tempo_attuale = chrono::system_clock::now();
+            time_t timestamp = chrono::system_clock::to_time_t(tempo_attuale);
+
             csv << nomeAlgoritmo(algoritmo_scelto) << "," << nomeModalita(mod_scelta) << ","
                 << frame_grigio.cols << "x" << frame_grigio.rows << ","<< fps_medi << ","
-                << tempo_medio_ms << "\n";
+                << tempo_medio_ms << "," 
+                << put_time(localtime(&timestamp), "%Y-%m-%d %H:%M:%S") << "\n";
+
             csv.flush(); 
 
             conta_frame=0;
             somma_tempo=0;
-            inizio_frame = std::chrono::high_resolution_clock::now();
+            inizio_frame = chrono::high_resolution_clock::now();
         }
 
         // affianco frame di input con frame di output formando un frame di larghezza pari al doppio delle due
