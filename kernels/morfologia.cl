@@ -1,4 +1,4 @@
-#define DIMENSIONE 15 
+#define DIMENSIONE 7 
 #define R ((DIMENSIONE - 1) / 2)
 
 // EROSIONE 
