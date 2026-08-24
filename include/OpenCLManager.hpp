@@ -5,6 +5,10 @@
 #include <opencv2/opencv.hpp>
 #include <string>
 
+class BufferNonAllineatoException : public std::runtime_error {
+    public:
+        explicit BufferNonAllineatoException(const std::string& msg): std::runtime_error(msg) {}
+};
 
 class OpenCLManager {
 
@@ -42,6 +46,9 @@ class OpenCLManager {
         cl::Kernel kernel_rotation;
         cl::Kernel kernel_scaling;
 
+        // byte di allineamento del device 
+        cl_uint byte_allineamento = 0;
+
         
         // funzione ausilaria per leggere un file .cl 
         std::string readFile(const std::string& filename);
@@ -52,6 +59,9 @@ class OpenCLManager {
 
         // funzione per controllare che la matrice di output abbia la stessa dimensione e lo stesso tipo di quella di input
         void controlloAllocazione(const cv::Mat& input, cv::Mat& output); 
+
+        // funzione ausiliaria per verificare l'allineamento in memoria delle matrici cv::Mat secondo i requisiti del device
+        bool verificaAllineamento(const cv::Mat& mat);
 
     public:
         OpenCLManager(); //costruttore

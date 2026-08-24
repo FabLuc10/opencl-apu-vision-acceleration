@@ -2,6 +2,9 @@
 #include <cmath>
 #include <algorithm>
 
+#define DIMENSIONE 7 
+#define R ((DIMENSIONE - 1) / 2)
+
 using namespace std;
 using namespace cv;
 
@@ -13,7 +16,7 @@ const float vettore_pesi[21] = {
     4845.0f/1048576, 1140.0f/1048576, 190.0f/1048576, 20.0f/1048576, 1.0f/1048576
 };
 
-const int raggio = 15;
+
 
 static void controlloAllocazione(const Mat& input, Mat& output)
 {
@@ -124,9 +127,9 @@ void runErosionCPU(const Mat& input, Mat& output)
         for(int x=0;x<cols;x++)
         {
             uchar minimo = 255;
-            for(int i=-raggio;i<=raggio;i++)
+            for(int i=-R;i<=R;i++)
             {
-                for(int j=-raggio;j<=raggio;j++)
+                for(int j=-R;j<=R;j++)
                 {
                     int x_clamp = clamp(x+i,0,cols-1);
                     int y_clamp = clamp(y+j,0,rows-1);
@@ -151,9 +154,9 @@ void runDilationCPU(const Mat& input, Mat& output)
         for(int x=0;x<cols;x++)
         {
             uchar massimo = 0;
-            for(int i=-raggio;i<=raggio;i++)
+            for(int i=-R;i<=R;i++)
             {
-                for(int j=-raggio;j<=raggio;j++)
+                for(int j=-R;j<=R;j++)
                 {
                     int x_clamp = clamp(x+i,0,cols-1);
                     int y_clamp = clamp(y+j,0,rows-1);

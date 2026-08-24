@@ -3,6 +3,7 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
+#include <cstdint>
 
 using namespace std;
 
@@ -28,6 +29,10 @@ OpenCLManager::OpenCLManager()
         // Creazione contesto OpenCL 
         context = cl::Context(device);
         queue = cl::CommandQueue(context,device);
+
+        // informazioni su allineamento del device
+        byte_allineamento = device.getInfo<CL_DEVICE_MEM_BASE_ADDR_ALIGN>()/8;
+    
     } catch(const cl::Error& e)
     {
         cerr<<"Errore OpenCL nel costruttore: "<<e.what()<<" ("<<e.err()<<")"<<endl;
@@ -120,12 +125,19 @@ void OpenCLManager::buildPrograms(const std::string& path_filtri, const std::str
     }
 }
 
+bool OpenCLManager::verificaAllineamento(const cv::Mat& mat)
+{
+    return (reinterpret_cast<uintptr_t>(mat.data)%byte_allineamento) == 0;
+}
+
 void OpenCLManager::allocaBuffer(size_t dim)
 {
     if(dim==ultima_dim) return; 
 
     input_gpu = cl::Buffer(context, CL_MEM_READ_ONLY, dim);
     output_gpu = cl::Buffer(context, CL_MEM_WRITE_ONLY, dim);
+    
+    // buffer temporaneo allocato su GPU 
     temp_gpu = cl::Buffer(context,CL_MEM_READ_WRITE,dim);
     ultima_dim = dim;
 }
@@ -148,7 +160,6 @@ void OpenCLManager::allocaBufferZero(const cv::Mat& input, cv::Mat& output)
         ultimo_ptr_out = output.data;
     }
 }
-
 
 void OpenCLManager::controlloAllocazione(const cv::Mat& input, cv::Mat& output)
 {
@@ -190,6 +201,9 @@ void OpenCLManager::runSobelStandard(const cv::Mat& input, cv::Mat& output)
 
         // trasferimento dati da buffer GPU a CPU 
         queue.enqueueReadBuffer(output_gpu,CL_TRUE,0,dim,output.data);
+
+        // garantisce che la coda OpenCL sia completamente vuota prima di passare al frame successivo
+        queue.finish();
 
     }
     catch(const cl::Error& e)
@@ -234,7 +248,7 @@ void OpenCLManager::runBlurStandard(const cv::Mat& input, cv::Mat& output)
         // trasferimento dati da GPU a CPU 
         queue.enqueueReadBuffer(output_gpu,CL_TRUE,0,dim,output.data);
 
-
+        queue.finish();
     }
     catch(const cl::Error& e)
     {
@@ -266,6 +280,8 @@ void OpenCLManager::runErosionStandard(const cv::Mat& input, cv::Mat& output)
         queue.enqueueNDRangeKernel(kernel_erosion,cl::NullRange,global_size);
 
         queue.enqueueReadBuffer(output_gpu,CL_TRUE,0,dim,output.data);
+
+        queue.finish();
     } catch(const cl::Error& e)
     {
         cerr << "Errore OpenCL in runErosionStandard: " << e.what() << " (" << e.err() << ")" << endl;    
@@ -295,6 +311,8 @@ void OpenCLManager::runDilationStandard(const cv::Mat& input, cv::Mat& output)
         queue.enqueueNDRangeKernel(kernel_dilation,cl::NullRange,global_size);
 
         queue.enqueueReadBuffer(output_gpu,CL_TRUE,0,dim,output.data);
+
+        queue.finish();
     } catch(const cl::Error& e)
     {
         cerr << "Errore OpenCL in runDilationStandard: " << e.what() << " (" << e.err() << ")" << endl;    
@@ -328,6 +346,8 @@ void OpenCLManager::runTranslationStandard(const cv::Mat& input, cv::Mat& output
         queue.enqueueNDRangeKernel(kernel_translation,cl::NullRange,global_size);
 
         queue.enqueueReadBuffer(output_gpu,CL_TRUE,0,dim,output.data);
+
+        queue.finish();
     }
     catch(const cl::Error& e)
     {
@@ -360,6 +380,7 @@ void OpenCLManager::runRotationStandard(const cv::Mat& input, cv::Mat& output, f
         queue.enqueueNDRangeKernel(kernel_rotation,cl::NullRange,global_size);
 
         queue.enqueueReadBuffer(output_gpu,CL_TRUE,0,dim,output.data);
+        queue.finish();
     }
     catch(const cl::Error& e)
     {
@@ -392,6 +413,8 @@ void OpenCLManager::runScalingStandard(const cv::Mat& input, cv::Mat& output, fl
         queue.enqueueNDRangeKernel(kernel_scaling,cl::NullRange,global_size);
 
         queue.enqueueReadBuffer(output_gpu,CL_TRUE,0,dim,output.data);
+
+        queue.finish();
     }
     catch(const cl::Error& e)
     {
@@ -404,9 +427,14 @@ void OpenCLManager::runScalingStandard(const cv::Mat& input, cv::Mat& output, fl
 
 void OpenCLManager::runSobelZero(const cv::Mat& input, cv::Mat& output)
 {
+    controlloAllocazione(input,output);
+
+    // se allineamento in memoria richiesto dal device non rispettato, lanciamo eccezione
+    if (!verificaAllineamento(input) || !verificaAllineamento(output))
+        throw BufferNonAllineatoException("runSobelZero: buffer non allineato al requisito del device (" +
+            to_string(byte_allineamento) + " byte)");
+   
     try{
-        controlloAllocazione(input,output);
-        
         allocaBufferZero(input,output);
 
         size_t dim = input.total()*input.elemSize();
@@ -440,6 +468,8 @@ void OpenCLManager::runSobelZero(const cv::Mat& input, cv::Mat& output)
         void* ptr_out = queue.enqueueMapBuffer(output_gpu_zero, CL_TRUE, CL_MAP_READ, 0, dim);
         queue.enqueueUnmapMemObject(output_gpu_zero, ptr_out);
 
+        queue.finish();
+
     } catch(const cl::Error& e)
     {
         cerr << "Errore OpenCL in runSobelZero: " << e.what() << " (" << e.err() << ")" << endl;
@@ -449,13 +479,18 @@ void OpenCLManager::runSobelZero(const cv::Mat& input, cv::Mat& output)
 
 void OpenCLManager::runBlurZero(const cv::Mat& input, cv::Mat& output)
 {
+    controlloAllocazione(input,output);
+
+    // se allineamento in memoria richiesto dal device non rispettato, lanciamo eccezione
+    if (!verificaAllineamento(input) || !verificaAllineamento(output))
+        throw BufferNonAllineatoException("runBlurZero: buffer non allineato al requisito del device (" +
+            to_string(byte_allineamento) + " byte)");
     try
     {  
-        controlloAllocazione(input,output);
-        
-        allocaBufferZero(input,output);
+        allocaBufferZero(input,  output);
 
         size_t dim = input.total()*input.elemSize();
+
         void* ptr_in = queue.enqueueMapBuffer(input_gpu_zero,CL_TRUE,CL_MAP_WRITE_INVALIDATE_REGION,0,dim);
         queue.enqueueUnmapMemObject(input_gpu_zero, ptr_in);
 
@@ -480,6 +515,8 @@ void OpenCLManager::runBlurZero(const cv::Mat& input, cv::Mat& output)
 
         void* ptr_out = queue.enqueueMapBuffer(output_gpu_zero, CL_TRUE, CL_MAP_READ, 0, dim);
         queue.enqueueUnmapMemObject(output_gpu_zero, ptr_out);
+
+        queue.finish();
     }
     catch(const cl::Error& e)
     {
@@ -490,9 +527,14 @@ void OpenCLManager::runBlurZero(const cv::Mat& input, cv::Mat& output)
 
 void OpenCLManager::runErosionZero(const cv::Mat& input, cv::Mat& output)
 {
-    try{
-        controlloAllocazione(input,output);
-        
+    controlloAllocazione(input,output);
+
+    // se allineamento in memoria richiesto dal device non rispettato, lanciamo eccezione
+    if (!verificaAllineamento(input) || !verificaAllineamento(output))
+        throw BufferNonAllineatoException("runErosionZero: buffer non allineato al requisito del device (" +
+            to_string(byte_allineamento) + " byte)");
+
+    try{        
         allocaBufferZero(input,output);
 
         size_t dim = input.total()*input.elemSize();
@@ -513,6 +555,8 @@ void OpenCLManager::runErosionZero(const cv::Mat& input, cv::Mat& output)
         void* ptr_out = queue.enqueueMapBuffer(output_gpu_zero, CL_TRUE, CL_MAP_READ, 0, dim);
         queue.enqueueUnmapMemObject(output_gpu_zero, ptr_out);
 
+        queue.finish();
+
     } catch(const cl::Error& e)
     {
         cerr << "Errore OpenCL in runErosionZero: " << e.what() << " (" << e.err() << ")" << endl;
@@ -521,9 +565,14 @@ void OpenCLManager::runErosionZero(const cv::Mat& input, cv::Mat& output)
 }
 void OpenCLManager::runDilationZero(const cv::Mat& input, cv::Mat& output)
 {
+    controlloAllocazione(input,output);
+
+    // se allineamento in memoria richiesto dal device non rispettato, lanciamo eccezione
+    if (!verificaAllineamento(input) || !verificaAllineamento(output))
+        throw BufferNonAllineatoException("runDilationZero: buffer non allineato al requisito del device (" +
+            to_string(byte_allineamento) + " byte)");
+
     try{
-        controlloAllocazione(input,output);
-        
         allocaBufferZero(input,output);
 
         size_t dim = input.total()*input.elemSize();
@@ -545,6 +594,8 @@ void OpenCLManager::runDilationZero(const cv::Mat& input, cv::Mat& output)
         void* ptr_out = queue.enqueueMapBuffer(output_gpu_zero, CL_TRUE, CL_MAP_READ, 0, dim);
         queue.enqueueUnmapMemObject(output_gpu_zero, ptr_out);
 
+        queue.finish();
+
     } catch(const cl::Error& e)
     {
         cerr << "Errore OpenCL in runDilationZero: " << e.what() << " (" << e.err() << ")" << endl;
@@ -552,10 +603,14 @@ void OpenCLManager::runDilationZero(const cv::Mat& input, cv::Mat& output)
 }
 void OpenCLManager::runTranslationZero(const cv::Mat& input, cv::Mat& output, int dx, int dy)
 {
-    try
-    {
-        controlloAllocazione(input,output);
+    controlloAllocazione(input,output);
 
+    // se allineamento in memoria richiesto dal device non rispettato, lanciamo eccezione
+    if (!verificaAllineamento(input) || !verificaAllineamento(output))
+        throw BufferNonAllineatoException("runTranslationZero: buffer non allineato al requisito del device (" +
+            to_string(byte_allineamento) + " byte)");
+            
+    try{
         allocaBufferZero(input,output);
 
         size_t dim = input.total()*input.elemSize();
@@ -578,6 +633,7 @@ void OpenCLManager::runTranslationZero(const cv::Mat& input, cv::Mat& output, in
 
         void* ptr_out = queue.enqueueMapBuffer(output_gpu_zero, CL_TRUE, CL_MAP_READ, 0, dim);
         queue.enqueueUnmapMemObject(output_gpu_zero, ptr_out);
+        queue.finish();
     }
     catch(const cl::Error& e)
     {
@@ -587,10 +643,14 @@ void OpenCLManager::runTranslationZero(const cv::Mat& input, cv::Mat& output, in
 
 void OpenCLManager::runRotationZero(const cv::Mat& input, cv::Mat& output, float grado_rotazione)
 {
-    try
-    {
-        controlloAllocazione(input,output);
+    controlloAllocazione(input,output);
 
+    // se allineamento in memoria richiesto dal device non rispettato, lanciamo eccezione
+    if (!verificaAllineamento(input) || !verificaAllineamento(output))
+        throw BufferNonAllineatoException("runRotationZero: buffer non allineato al requisito del device (" +
+            to_string(byte_allineamento) + " byte)");
+            
+    try{
         allocaBufferZero(input,output);
 
         size_t dim = input.total()*input.elemSize();
@@ -612,6 +672,8 @@ void OpenCLManager::runRotationZero(const cv::Mat& input, cv::Mat& output, float
 
         void* ptr_out = queue.enqueueMapBuffer(output_gpu_zero, CL_TRUE, CL_MAP_READ, 0, dim);
         queue.enqueueUnmapMemObject(output_gpu_zero, ptr_out);
+
+        queue.finish();
     }
     catch(const cl::Error& e)
     {
@@ -621,10 +683,14 @@ void OpenCLManager::runRotationZero(const cv::Mat& input, cv::Mat& output, float
 
 void OpenCLManager::runScalingZero(const cv::Mat& input, cv::Mat& output, float scala)
 {
-    try
-    {
-        controlloAllocazione(input,output);
+    controlloAllocazione(input,output);
 
+    // se allineamento in memoria richiesto dal device non rispettato, lanciamo eccezione
+    if (!verificaAllineamento(input) || !verificaAllineamento(output))
+        throw BufferNonAllineatoException("runScalingZero: buffer non allineato al requisito del device (" +
+            to_string(byte_allineamento) + " byte)");
+            
+    try{
         allocaBufferZero(input,output);
 
         size_t dim = input.total()*input.elemSize();
@@ -646,6 +712,8 @@ void OpenCLManager::runScalingZero(const cv::Mat& input, cv::Mat& output, float 
 
         void* ptr_out = queue.enqueueMapBuffer(output_gpu_zero, CL_TRUE, CL_MAP_READ, 0, dim);
         queue.enqueueUnmapMemObject(output_gpu_zero, ptr_out);
+
+        queue.finish();
     }
     catch(const cl::Error& e)
     {
