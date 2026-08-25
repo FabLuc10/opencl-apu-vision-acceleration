@@ -52,38 +52,58 @@ La cartella `kernels/` viene copiata automaticamente nella directory di build da
 
 ## Esecuzione
 
-```bash
-./build/opencl-apu-vision-acceleration
-```
+Il progetto produce **due eseguibili distinti**, con scopi diversi.
 
+### Demo interattiva (webcam live)
+
+```bash
+./build/opencl_apu_vision_acceleration
+```
+ 
 Il programma chiede a menu quale algoritmo e quale modalità eseguire, poi apre la webcam e mostra a schermo l'immagine di input affiancata al risultato elaborato in tempo reale. Premere **ESC** per terminare.
  
-Ad ogni finestra di 30 frame elaborati, il programma stampa a console FPS medi e tempo medio di elaborazione per frame, e appende una riga a `results/benchmark_risultati.csv` con: algoritmo, modalità, risoluzione, FPS medi, tempo medio (ms), timestamp.
+Ad ogni finestra di 30 frame elaborati, il programma stampa a console FPS medi e tempo medio di elaborazione per frame, e appende una riga a `results/risultati_demo.csv` con: algoritmo, modalità, risoluzione, FPS medi, tempo medio (ms), timestamp.
+
+Se un buffer non rispetta l'allineamento di memoria richiesto dal device per l'esecuzione zero-copy, il programma passa automaticamente alla modalità GPU Standard per il resto della sessione, avvisando l'utente.
+
+### benchmark automatico con video precaricato Full HD
+
+```bash
+./build/benchmark
+```
+
+Esegue **tutti gli algoritmi in tutte le modalità** (GPU Standard, GPU Zero-copy, CPU) in sequenza su un video precaricato (`media/video_benchmark.mp4`), elaborando un numero fisso di frame per ciascuna combinazione. A differenza della demo interattiva, non è limitato dal frame rate di acquisizione della webcam: misura il tempo di elaborazione puro, condizione necessaria per un confronto statisticamente corretto tra le modalità. I risultati vengono salvati in `results/benchmark.csv`.
+
+Se durante l'esecuzione in modalità Zero-copy un buffer risulta non allineato al requisito del device, il programma si interrompe con un errore invece di proseguire silenziosamente per non invalidare il benchmark.
 
 ## Benchmark
 
 Per rendere il confronto tra CPU e GPU rappresentativo, le implementazioni CPU in `AlgoritmiCPU.cpp` replicano fedelmente la stessa logica algoritmica dei kernel `.cl` (stessa maschera Sobel, stesso raggio di blur, stesso elemento strutturante, stessa formula di interpolazione bilineare) — il confronto misura quindi l'effetto della parallelizzazione a parità di algoritmo, non la differenza tra implementazioni diverse.
  
-I parametri delle trasformazioni geometriche (traslazione, angolo di rotazione, fattore di scala) sono fissati in `main.cpp`, per garantire condizioni di carico identiche tra le esecuzioni ripetute.
+I parametri delle trasformazioni geometriche (traslazione, angolo di rotazione, fattore di scala) sono fissati in `main.cpp` e `benchmark.cpp`, per garantire condizioni di carico identiche tra le esecuzioni ripetute.
 
-## Struttura del progetto
+ ## Struttura del progetto
  
 ```
-.
-├── include/                
-│   ├── OpenCLManager.hpp   # Wrapper per contesto/coda/buffer/kernel OpenCL
-│   └── AlgoritmiCPU.hpp    # Firme delle implementazioni degli algoritmi su CPU
-├── src/                    
-│   ├── main.cpp            # menu interattivo, acquisizione webcam, benchmark
-│   ├── OpenCLManager.cpp   # Gestione GPU: setup, build kernel, metodi per runnare su GPU
-│   └── AlgoritmiCPU.cpp    # Implementazione algoritmi in c++ puro
-├── kernels/                
-│   ├── filtri.cl           # sobel, blur
-│   ├── morfologia.cl       # erosion, dilation
-│   └── geometria.cl        # translation, rotation, scaling
-├── results/
-│   └── benchmark_risultati.csv   # Log dei benchmark
-└── CMakeLists.txt
+ .
+ ├── include/                
+ │   ├── OpenCLManager.hpp   # wrapper per contesto/coda/buffer/kernel OpenCL
+ │   └── AlgoritmiCPU.hpp    # firme delle implementazioni degli algoritmi su CPU
+ ├── src/                    
+ │   ├── main.cpp            # menu interattivo, acquisizione webcam, benchmark
+ │   ├── benchmark.cpp       # benchmark su video FUll HD
+ │   ├── OpenCLManager.cpp   # Gestione GPU: setup, build kernel, metodi per runnare su GPU
+ │   └── AlgoritmiCPU.cpp    # Implementazione algoritmi in c++ puro
+ ├── kernels/                
+ │   ├── filtri.cl           # sobel, blur
+ │   ├── morfologia.cl       # erosion, dilation
+ │   └── geometria.cl        # translation, rotation, scaling
+ ├── media/
+ │   └── video_benchmark.mp4   # video di riferimento usato da benchmark.cpp
+ ├── results/
+ │   ├── risultati_demo.csv          # log della demo interattiva
+ │   └── benchmark.csv   # log del benchmark automatico
+ └── CMakeLists.txt
 ```
 
 ## Autore 

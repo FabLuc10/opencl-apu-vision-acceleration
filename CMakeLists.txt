@@ -9,17 +9,22 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(OpenCL REQUIRED)
 find_package(OpenCV REQUIRED)
 
-# raggruppa i file sorgente .cpp in una variabile SOURCES 
-set(SOURCES src/main.cpp src/OpenCLManager.cpp src/AlgoritmiCPU.cpp)
+# raggruppa i file sorgente comuni ai due eseguibili in una variabile SOURCES 
+set(SOURCES src/OpenCLManager.cpp src/AlgoritmiCPU.cpp)
 
-# creazione del target eseguibile 
-add_executable(${PROJECT_NAME} ${SOURCES})
+# creazione del target eseguibile con menu interattivo
+add_executable(${PROJECT_NAME} src/main.cpp ${SOURCES})
+
+# creazione del target eseguibile di benchmark
+add_executable(benchmark src/benchmark.cpp ${SOURCES})
 
 # indicazioni per trovare i file header .hpp
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(benchmark PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # linking alle librerie esterne
 target_link_libraries(${PROJECT_NAME} PRIVATE OpenCL::OpenCL ${OpenCV_LIBS})
+target_link_libraries(benchmark PRIVATE OpenCL::OpenCL ${OpenCV_LIBS})
 
 # copia dell'intera cartella "kernels" dalla cartella corrente alla cartella di compilazione
 # in questo modo è possibile compilare i file sorgenti OpenCL a runtime 

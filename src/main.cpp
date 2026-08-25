@@ -181,7 +181,7 @@ int main()
     }
 
     ofstream csv;
-    apriCSV("results/benchmark_risultati.csv",csv);
+    apriCSV("results/risultati_demo.csv",csv);
 
     Mat frame_input, frame_grigio, frame_output;
 
@@ -199,6 +199,8 @@ int main()
 
     cout<<"Premere ESC per terminare"<<endl;
 
+    bool fallback = false;
+
     while(cap.read(frame_input))
     {
         // trasformazione del frame a colori in scala di grigi 
@@ -206,10 +208,21 @@ int main()
 
         auto inizio = chrono::high_resolution_clock::now();
 
-        if(mod_scelta == Modalita::CPU_MODE)
-            runCPU(frame_grigio,frame_output,algoritmo_scelto);
-        else 
+        try{
+            if(mod_scelta == Modalita::CPU_MODE)
+                runCPU(frame_grigio,frame_output,algoritmo_scelto);
+            else 
+                runGPU(frame_grigio,frame_output,manager,algoritmo_scelto,mod_scelta);
+        } catch(const BufferNonAllineatoException& e)
+        {
+            if(!fallback)
+            {
+                cerr << e.what()<<"\nPassaggio a modalita' GPU Standard"<<endl; 
+                fallback = true;
+            }
+            mod_scelta = Modalita::GPU_STANDARD; 
             runGPU(frame_grigio,frame_output,manager,algoritmo_scelto,mod_scelta);
+        }
         
         auto fine = chrono::high_resolution_clock::now();
 
