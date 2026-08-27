@@ -62,7 +62,7 @@ Ad ogni finestra di 30 frame elaborati, il programma stampa a console FPS medi e
 
 Se un buffer non rispetta l'allineamento di memoria richiesto dal device per l'esecuzione Zero-copy, il programma passa automaticamente alla modalità GPU Standard per il resto della sessione, avvisando l'utente.
 
-### benchmark automatico con video precaricato Full HD
+### Benchmark automatico con video precaricato Full HD
 
 ```bash
 ./build/benchmark
@@ -71,6 +71,8 @@ Se un buffer non rispetta l'allineamento di memoria richiesto dal device per l'e
 Esegue **tutti gli algoritmi in tutte le modalità** (GPU Zero-copy, GPU Standard, CPU) in sequenza su un video precaricato (`media/video_benchmark.mp4`), elaborando un numero fisso di frame per ciascuna combinazione. A differenza della demo interattiva, non è limitato dal frame rate di acquisizione della webcam: misura il tempo di elaborazione puro, condizione necessaria per un confronto statisticamente corretto tra le modalità, e salva i risultati in `results/benchmark.csv`.
 
 Se durante l'esecuzione in modalità Zero-copy un buffer risulta non allineato al requisito del device, il programma cattura l'eccezione personalizzata BufferNonAllineatoException e interrompe l'esecuzione di quel test per non invalidare il benchmark.
+
+> Il video utilizzato per il benchmark è un estratto di *Big Buck Bunny* (© Blender Foundation, 2008), distribuito con licenza [Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/).
 
 ## Benchmark
 
