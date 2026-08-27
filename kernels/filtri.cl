@@ -2,6 +2,10 @@
 // si sfrutta la proprietà di separabilità della gaussiana per avere ottimizzazione computazionale
 // complessità per pixel passa da O(N^2) a O(2N)
 
+// Memoria local formata nel seguente modo per blur_x ->         HALO         PIXEL(256)        HALO
+//                                                          |xxxxxxxxxx|pixel dei work-items|xxxxxxxxxx|
+
+#define R 10
 __constant float vettore_pesi[21] = {
     1.0f/1048576, 20.0f/1048576, 190.0f/1048576, 1140.0f/1048576, 
     4845.0f/1048576, 15504.0f/1048576, 38760.0f/1048576, 77520.0f/1048576, 
@@ -10,38 +14,69 @@ __constant float vettore_pesi[21] = {
     4845.0f/1048576, 1140.0f/1048576, 190.0f/1048576, 20.0f/1048576, 1.0f/1048576
 }; // pesi binomiali normalizzati che approssimano la funzione gaussiana 
 
-__kernel void blur_x(__global const uchar* input, __global uchar* output, int rows, int cols)
-{
-    int x = get_global_id(0);
-    int y = get_global_id(1);
 
-    if(x>=cols || y>=rows) return;
+__kernel void blur_x(__global const uchar* input, __global uchar* output, int rows, int cols, __local uchar* locale)
+{
+    int gx = get_global_id(0);
+    int gy = get_global_id(1);
+    int lx = get_local_id(0);
+    int local_size = get_local_size(0);
+
+    // work group ha dimensione 256x1, quindi se gy fuori significa che tutti i work-item di quel group sono fuori dall'immagine
+    if(gy>=rows) return;
+
+    // ogni work-item carica nelle memoria local il suo dato a paritre dalla posizione lx+R 
+    locale[lx+R] = input[gy*cols+clamp(gx,0,cols-1)];
+
+    // caricamento in memoria degli R vicini del work-group a sx e dx 
+    if(lx<R)
+        locale[lx] = input[gy*cols+clamp(gx-R,0,cols-1)]; // se coordinata x+k va sotto 0 viene forzata a 0, se va sopra cols-1 viene forzata a cols-1
+    else if(lx>=local_size-R)
+        locale[lx+2*R] = input[gy*cols+clamp(gx+R,0,cols-1)];
+
+    // sincronizzazione: blocca l'avanzamento del work_item fino a quando tutti hanno finito di copiare nella memoria locale
+    // garantisce consistenza dei dati
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    if(gx>=cols) return;
 
     float somma = 0.0f;
-    for(int k=-10; k<=10;k++)
-    {
-        int index = clamp(x+k,0,cols-1); // se coordinata x+k va sotto 0 viene forzata a 0, se va sopra cols-1 viene forzata a cols-1 
-        somma += input[y*cols+index] * vettore_pesi[k+10];  // convoluzione spaziale 
-    }
 
-    output[y*cols+x] = (uchar) clamp(somma,0.0f,255.0f);
+    #pragma unroll
+    for(int k=-R; k<=R;k++)
+        somma += locale[lx+R+k] * vettore_pesi[k+R];  // convoluzione spaziale 
+    
+    output[gy*cols+gx] = (uchar) clamp(somma,0.0f,255.0f);
 }
 
-__kernel void blur_y(__global const uchar* input, __global uchar* output, int rows, int cols)
+__kernel void blur_y(__global const uchar* input, __global uchar* output, int rows, int cols, __local uchar* locale)
 {
-    int x = get_global_id(0);
-    int y = get_global_id(1);
+    int gx = get_global_id(0);
+    int gy = get_global_id(1);
+    int ly = get_local_id(1);
+    int local_size = get_local_size(1);
 
-    if(x>=cols || y>=rows) return;
+    // work group ha dimensione 1x256, quindi se gx fuori significa che tutti i work-item di quel group sono fuori dall'immagine
+    if(gx>=cols) return;
+
+    locale[ly+R] = input[clamp(gy,0,rows-1)*cols+gx];
+
+    if(ly<R)
+        locale[ly] = input[clamp(gy-R,0,rows-1)*cols+gx]; 
+    else if(ly>=local_size-R)
+        locale[ly+2*R] = input[clamp(gy+R,0,rows-1)*cols+gx];
+    
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    if(gy>=rows) return;
 
     float somma = 0.0f;
-    for(int k=-10; k<=10;k++)
-    {
-        int index = clamp(y+k,0,rows-1);  
-        somma += input[index*cols+x] * vettore_pesi[k+10];  
-    }
 
-    output[y*cols+x] = (uchar) clamp(somma,0.0f,255.0f);
+    #pragma unroll
+    for(int k=-R; k<=R;k++)
+        somma += locale[ly+R+k] * vettore_pesi[k+R];  
+    
+    output[gy*cols+gx] = (uchar) clamp(somma,0.0f,255.0f);
 }
 
 // SOBEL per edge detection 

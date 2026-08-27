@@ -80,10 +80,11 @@ void OpenCLManager::buildPrograms(const std::string& path_filtri, const std::str
         prog_geometria = cl::Program(context,kernel_geometria);
         prog_morfologia = cl::Program(context,kernel_morfologia);
 
-        // compilazione dei kernel su GPU 
-        prog_filtri.build({device});
-        prog_geometria.build({device});
-        prog_morfologia.build({device});
+        // compilazione dei kernel su GPU con ottimizzazioni del compilatore
+        const char* cl_options = "-cl-fast-relaxed-math -cl-mad-enable";
+        prog_filtri.build({device}, cl_options);
+        prog_geometria.build({device}, cl_options);
+        prog_morfologia.build({device}, cl_options);
 
         // estrazione dei kernels
         kernel_blur_x = cl::Kernel(prog_filtri,"blur_x");
@@ -188,6 +189,7 @@ void OpenCLManager::runSobelStandard(const cv::Mat& input, cv::Mat& output)
 
         int rows = input.rows;
         int cols = input.cols;
+
         kernel_sobel.setArg(0,input_gpu);
         kernel_sobel.setArg(1,output_gpu);
         kernel_sobel.setArg(2,rows);
@@ -228,22 +230,57 @@ void OpenCLManager::runBlurStandard(const cv::Mat& input, cv::Mat& output)
 
         int rows = input.rows;
         int cols = input.cols;
+
+        const int R = 10;
+
+        // grandezza work-group orizzontale 1D 256x1
+        size_t local_cols = 256;
+        size_t local_rows = 1;
+
+        // arrotondamento della di global size affinché sia multiplo di local size 
+        size_t global_cols = ((cols+local_cols-1)/local_cols)*local_cols;
+
+        // dimensione globale su cui lavoraranno i work-items
+        cl::NDRange global_size(global_cols, rows);
+
+        // dimensione local 
+        cl::NDRange local_size(local_cols,local_rows);
+
+        // bytes da allocare sono: dimensione locale + vicini del work-group che servono all'algoritmo (2*R)
+        size_t bytes = (local_cols+2*R)*sizeof(uchar);
+
         kernel_blur_x.setArg(0,input_gpu);
         kernel_blur_x.setArg(1,temp_gpu);
         kernel_blur_x.setArg(2,rows);
         kernel_blur_x.setArg(3,cols);
+        kernel_blur_x.setArg(4, cl::Local(bytes));
 
-        cl::NDRange global_size(cols,rows);
+        queue.enqueueNDRangeKernel(kernel_blur_x,cl::NullRange,global_size,local_size);
 
-        queue.enqueueNDRangeKernel(kernel_blur_x,cl::NullRange,global_size);
+        // grandezza work-group verticale 1x256
+        local_cols = 1;
+        local_rows = 256;
+
+        // arrotondamento della di global size affinché sia multiplo di local size 
+        size_t global_rows = ((rows+local_rows-1)/local_rows)*local_rows;
+
+        // dimensione globale su cui lavoraranno i work-items
+        global_size = cl::NDRange(cols, global_rows);
+
+        // dimensione local 
+        local_size = cl::NDRange(local_cols,local_rows);
+
+        // bytes da allocare sono: dimensione locale + vicini del work-group che servono all'algoritmo (2*R)
+        bytes = (local_rows+2*R)*sizeof(uchar);
 
         // esecuzione secondo kernel verticale 
         kernel_blur_y.setArg(0,temp_gpu);
         kernel_blur_y.setArg(1,output_gpu);
         kernel_blur_y.setArg(2,rows);
         kernel_blur_y.setArg(3,cols);
+        kernel_blur_y.setArg(4,cl::Local(bytes));
 
-        queue.enqueueNDRangeKernel(kernel_blur_y,cl::NullRange,global_size);
+        queue.enqueueNDRangeKernel(kernel_blur_y,cl::NullRange,global_size,local_size);
 
         // trasferimento dati da GPU a CPU 
         queue.enqueueReadBuffer(output_gpu,CL_TRUE,0,dim,output.data);
@@ -496,22 +533,44 @@ void OpenCLManager::runBlurZero(const cv::Mat& input, cv::Mat& output)
 
         int rows = input.rows;
         int cols = input.cols;
-        cl::NDRange global_size(cols,rows);
+        const int R = 10;
+
+        size_t local_cols = 256;
+        size_t local_rows = 1;
+
+        size_t global_cols = ((cols+local_cols-1)/local_cols)*local_cols;
+
+        cl::NDRange global_size(global_cols, rows);
+        cl::NDRange local_size(local_cols, local_rows);
+
+        size_t bytes = (local_cols+2*R)*sizeof(uchar);
 
         // esecuzione primo kernel
         kernel_blur_x.setArg(0,input_gpu_zero);
         kernel_blur_x.setArg(1,temp_gpu_zero);
         kernel_blur_x.setArg(2,rows);
         kernel_blur_x.setArg(3,cols);
-        queue.enqueueNDRangeKernel(kernel_blur_x, cl::NullRange, global_size);
+        kernel_blur_x.setArg(4,cl::Local(bytes));
+        queue.enqueueNDRangeKernel(kernel_blur_x, cl::NullRange, global_size,local_size);
+
+        local_cols = 1;
+        local_rows = 256;
+
+        size_t global_rows = ((rows+local_rows-1)/local_rows)*local_rows;
+
+        global_size = cl::NDRange(cols, global_rows);
+        local_size = cl::NDRange(local_cols,local_rows);
+
+        bytes = (local_rows+2*R)*sizeof(uchar);
 
         // esecuzione secondo kernel
         kernel_blur_y.setArg(0, temp_gpu_zero);
         kernel_blur_y.setArg(1, output_gpu_zero);
         kernel_blur_y.setArg(2, rows);
         kernel_blur_y.setArg(3, cols);
+        kernel_blur_y.setArg(4,cl::Local(bytes));
 
-        queue.enqueueNDRangeKernel(kernel_blur_y, cl::NullRange, global_size);
+        queue.enqueueNDRangeKernel(kernel_blur_y, cl::NullRange, global_size,local_size);
 
         void* ptr_out = queue.enqueueMapBuffer(output_gpu_zero, CL_TRUE, CL_MAP_READ, 0, dim);
         queue.enqueueUnmapMemObject(output_gpu_zero, ptr_out);

@@ -137,7 +137,7 @@ int main()
             {
                 if (primo)
                 {
-                    csv<<"\nTEST\n";
+                    csv<<"TEST,,,,,\n";
                     primo = false;
                 }
                 VideoCapture cap(video_path);
