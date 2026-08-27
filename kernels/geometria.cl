@@ -37,8 +37,8 @@ uchar interpolazione_bilineare(__global const uchar*input, float x, float y, int
         return 0;
 
     // individuo i 4 pixel vicini e faccio media pesata dell'intensità in base alla distanza
-    int x0 = (int) floor(x);
-    int y0 = (int) floor(y);
+    int x0 = (int) x;
+    int y0 = (int) y;
     int x1 = min(x0+1,cols-1);
     int y1 = min(y0+1,rows-1);
 

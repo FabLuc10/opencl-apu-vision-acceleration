@@ -10,16 +10,22 @@ __kernel void erosion(__global const uchar* input, __global uchar* output, int r
 
     if(x>=cols || y>=rows) return;
 
+    
     uchar minimo = 255;
-    for(int i=-R;i<=R;i++)
-        for(int j=-R;j<=R;j++)
+    #pragma unroll 
+    for(int j=-R;j<=R;j++)
+    {
+        int y_clamp = clamp(y+j,0,rows-1); 
+
+        #pragma unroll 
+        for(int i=-R;i<=R;i++)
         {
             int x_clamp = clamp(x+i,0,cols-1); 
-            int y_clamp = clamp(y+j,0,rows-1); 
-
+            
             uchar intensita = input[y_clamp*cols+x_clamp];
             minimo = min(minimo,intensita);
         }
+    }
     
     output[y*cols+x] = minimo;
 }
@@ -36,14 +42,18 @@ __kernel void dilation(__global const uchar* input, __global uchar* output, int 
 
     uchar massimo = 0;
 
-    for(int i=-R;i<=R;i++)
-        for(int j=-R;j<=R;j++)
+    #pragma unroll
+    for(int j=-R;j<=R;j++)
+    {
+        int y_clamp = clamp(y+j,0,rows-1);
+
+        #pragma unroll
+        for(int i=-R;i<=R;i++)
         {
             int x_clamp = clamp(x+i,0,cols-1);
-            int y_clamp = clamp(y+j,0,rows-1);
-
             uchar intensita = input[y_clamp*cols+x_clamp];
             massimo = max(massimo,intensita);
         }
+    }
     output[y*cols+x] = massimo;
 }
