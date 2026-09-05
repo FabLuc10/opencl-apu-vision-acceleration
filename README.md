@@ -60,7 +60,7 @@ Il programma chiede a menu quale algoritmo e quale modalità eseguire, poi apre 
  
 Ad ogni finestra di 30 frame elaborati, il programma stampa a console FPS medi e tempo medio di elaborazione per frame, e appende una riga a `results/risultati_demo.csv` con: algoritmo, modalità, risoluzione, FPS medi, tempo medio (ms), timestamp.
 
-Se un buffer non rispetta l'allineamento di memoria richiesto dal device per l'esecuzione Zero-copy, il programma passa automaticamente alla modalità GPU Standard per il resto della sessione, avvisando l'utente.
+Per garantire la corretta esecuzione della modalità Zero-copy, i buffer delle immagini vengono allocati esplicitamente in C++ (tramite `aligned_alloc`) rispettando il requisito di allineamento richiesto dal device OpenCL.
 
 ### Benchmark automatico con video precaricato Full HD
 
@@ -68,9 +68,9 @@ Se un buffer non rispetta l'allineamento di memoria richiesto dal device per l'e
 ./build/benchmark
 ```
 
-Esegue **tutti gli algoritmi in tutte le modalità** (GPU Zero-copy, GPU Standard, CPU) in sequenza su un video precaricato (`media/video_benchmark.mp4`), elaborando un numero fisso di frame per ciascuna combinazione. A differenza della demo interattiva, non è limitato dal frame rate di acquisizione della webcam: misura il tempo di elaborazione puro, condizione necessaria per un confronto statisticamente corretto tra le modalità, e salva i risultati in `results/benchmark.csv`.
+Prima di avviare il benchmark, il programma esegue una **fase di validazione** per accertarsi che i risultati prodotti dai kernel GPU siano coerenti con quelli prodotti dalla CPU. 
 
-Se durante l'esecuzione in modalità Zero-copy un buffer risulta non allineato al requisito del device, il programma cattura l'eccezione personalizzata BufferNonAllineatoException e interrompe l'esecuzione di quel test per non invalidare il benchmark.
+Successivamente, esegue **tutti gli algoritmi in tutte le modalità** (GPU Zero-copy, GPU Standard, CPU) in sequenza su un video precaricato (`media/video_benchmark.mp4`), elaborando un numero fisso di frame per ciascuna combinazione. A differenza della demo interattiva, non è limitato dal frame rate di acquisizione della webcam: misura il tempo di elaborazione puro, condizione necessaria per un confronto statisticamente corretto, e salva i risultati in `results/benchmark.csv`. Anche qui, la memoria viene pre-allineata dinamicamente per garantire il pieno supporto Zero-copy.
 
 > Il video utilizzato per il benchmark è un estratto di *Big Buck Bunny* (© Blender Foundation, 2008), distribuito con licenza [Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/).
 

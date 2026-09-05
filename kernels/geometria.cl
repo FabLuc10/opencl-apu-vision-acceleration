@@ -33,7 +33,7 @@ __kernel void translation(__global const uchar* input, __global uchar* output, i
 
 uchar interpolazione_bilineare(__global const uchar*input, float x, float y, int rows, int cols)
 {
-    if(x<0 || y<0 || x>cols-1 || y>rows-1)
+    if(x<0 || y<0 || x>=cols || y>=rows)
         return 0;
 
     // individuo i 4 pixel vicini e faccio media pesata dell'intensità in base alla distanza

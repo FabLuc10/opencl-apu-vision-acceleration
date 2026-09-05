@@ -6,6 +6,7 @@
 #include "AlgoritmiCPU.hpp"
 #include <fstream>
 #include <filesystem>
+#include <cstdlib>
 
 using namespace std;
 using namespace cv;
@@ -110,6 +111,56 @@ void apriCSV(const string& file_path, ofstream& csv)
         csv<<"algoritmo,modalita,risoluzione,fps_medi,tempo_medio_ms,timestamp\n";
 }
 
+bool verificaCorrettezza(const Mat& input, OpenCLManager& manager, Algoritmo algo)
+{
+    size_t dim_frame = input.total() * input.elemSize();
+    size_t allineamento = manager.getByteAllineamento();
+    size_t alloc_size = ((dim_frame+allineamento-1)/allineamento)*allineamento;
+
+    // allocazione dei buffer per i test 
+    void* ptr_cpu = aligned_alloc(allineamento, alloc_size);
+    void* ptr_std = aligned_alloc(allineamento, alloc_size);
+    void* ptr_zero = aligned_alloc(allineamento, alloc_size);
+
+    Mat output_cpu(input.rows, input.cols, CV_8UC1, ptr_cpu);
+    Mat output_gpu_std(input.rows, input.cols, CV_8UC1, ptr_std);
+    Mat output_gpu_zero(input.rows, input.cols, CV_8UC1, ptr_zero); 
+
+    runCPU(input, output_cpu, algo);
+    runGPU(input, output_gpu_std, manager, algo, Modalita::GPU_STANDARD);
+    runGPU(input, output_gpu_zero, manager, algo, Modalita::GPU_ZERO);
+    
+    Mat diff_std, diff_zero;
+
+    // calcolo della differenza assoluta pixel per pixel tra CPU e modalità GPU  
+    absdiff(output_cpu, output_gpu_std, diff_std); 
+    absdiff(output_cpu, output_gpu_zero, diff_zero);
+    
+    // ispezione della matrice differenza per calcolare min e max dell'errore
+    double max_err_std, max_err_zero;
+    minMaxLoc(diff_std, NULL, &max_err_std);
+    minMaxLoc(diff_zero, NULL, &max_err_zero);
+    
+    const double TOLLERANZA = 1.0; 
+    
+    bool risultato;
+
+    if(max_err_std <= TOLLERANZA && max_err_zero <= TOLLERANZA) 
+        risultato = true;
+    else 
+    {
+        cerr << "\n[ERRORE] " << nomeAlgoritmo(algo) << " ha fallito il test!"
+             << "\nErrore max tra CPU e GPU Standard: " << max_err_std 
+             << " | Errore max tra CPU e GPU Zero-Copy: " << max_err_zero << endl;
+        risultato=false;
+    }
+
+    free(ptr_cpu);
+    free(ptr_std);
+    free(ptr_zero);
+    return risultato;
+}
+
 
 int main()
 {
@@ -125,12 +176,77 @@ int main()
     apriCSV("results/benchmark.csv",csv);
 
     string video_path="media/video_benchmark.mp4";
+    
+    VideoCapture init_cap(video_path);
+    if (!init_cap.isOpened()) 
+    {
+        cerr << "Errore: impossibile aprire il video in " << video_path << endl;
+        return -1;
+    }
 
-    Mat frame_input, frame_grigio, frame_output;
+    int larghezza = init_cap.get(CAP_PROP_FRAME_WIDTH);
+    int altezza = init_cap.get(CAP_PROP_FRAME_HEIGHT);
+    init_cap.release(); 
+
+    size_t dim_frame = larghezza * altezza; 
+
+    // otteniamo allineamento del device richiesto e calcoliamo i bytes da allocare al multiplo più vicino  
+    size_t allineamento = manager.getByteAllineamento();
+    size_t alloc_size = ((dim_frame+allineamento-1)/allineamento)*allineamento;
+
+    // allocazione memoria allineata 
+    void* ptr_in = aligned_alloc(allineamento, alloc_size);
+    void* ptr_out = aligned_alloc(allineamento, alloc_size);
+
+    if (!ptr_in || !ptr_out) 
+    {
+        cerr << "Errore di allocazione della memoria allineata" << endl;
+        if (ptr_in) free(ptr_in);
+        if (ptr_out) free(ptr_out);
+        return -1;
+    }
+
+    // operazione di wrapping nei cv::Mat
+    Mat frame_input;
+    Mat frame_grigio(altezza, larghezza, CV_8UC1, ptr_in);
+    Mat frame_output(altezza, larghezza, CV_8UC1, ptr_out);
 
     bool primo = true;
 
     try{
+        cout << "FASE DI VALIDAZIONE CORRETTEZZA ALGORITMI" << endl;
+
+        VideoCapture test(video_path);
+
+        if (!test.isOpened()) {
+            cerr << "Errore: impossibile aprire il video in " << video_path << endl;
+            free(ptr_in); 
+            free(ptr_out);
+            return -1;
+        }
+
+        test.read(frame_input);
+        cvtColor(frame_input, frame_grigio, COLOR_BGR2GRAY);
+        test.release();
+
+        bool corretto = true;
+        for(Algoritmo algo : algoritmi) 
+        {
+            cout << "Verifica " << nomeAlgoritmo(algo) << "... ";
+            if(verificaCorrettezza(frame_grigio, manager, algo)) {
+                cout << "OK!" << endl;
+            } else {
+                corretto = false;
+            }
+        }
+        
+        if(!corretto) 
+        {
+            free(ptr_in);
+            free(ptr_out);
+            return -1;
+        }
+        
         for(Modalita mod : modalita)
         {
             for(Algoritmo algo : algoritmi)
@@ -140,9 +256,13 @@ int main()
                     csv<<"TEST,,,,,\n";
                     primo = false;
                 }
+
                 VideoCapture cap(video_path);
-                if (!cap.isOpened()) {
+                if (!cap.isOpened()) 
+                {
                     cerr << "Errore: impossibile aprire il video in " << video_path << endl;
+                    free(ptr_in); 
+                    free(ptr_out);
                     return -1;
                 }
 
@@ -166,8 +286,10 @@ int main()
                     auto fine = chrono::high_resolution_clock::now();
 
                     somma_tempo += chrono::duration<double, milli>(fine - inizio).count();
-                    conta_frame++;
+                    conta_frame++; 
                 }
+                
+                cap.release();
 
                 double tempo_medio_ms = somma_tempo/conta_frame;
                 double fps_puri = 1000.0/tempo_medio_ms; 
@@ -191,11 +313,15 @@ int main()
         csv << "ERRORE,,,,,\n";
         csv.flush();
         csv.close();
+        free(ptr_in);
+        free(ptr_out);
         return -1;
     }
     
     cout << "\nBenchmark completato con successo" << endl;
     csv.close();
+    free(ptr_in);
+    free(ptr_out);
     return 0;
 }
   

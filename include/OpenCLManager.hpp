@@ -65,7 +65,10 @@ class OpenCLManager {
 
     public:
         OpenCLManager(); //costruttore
-        ~OpenCLManager(); //distruttore 
+        ~OpenCLManager(); //distruttore  
+
+        // Restituisce l'allineamento richiesto dal device
+        cl_uint getByteAllineamento() {return byte_allineamento;}
 
         // metodo per compilare i file .cl a runtime 
         void buildPrograms(const std::string& path_filtri, const std::string& path_morfologia, const std::string& path_geometria);

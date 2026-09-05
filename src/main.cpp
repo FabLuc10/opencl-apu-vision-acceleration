@@ -6,6 +6,7 @@
 #include "AlgoritmiCPU.hpp"
 #include <fstream>
 #include <filesystem>
+#include <cstdlib>
 
 /*
     <chrono> si basa si basa su 3 concetti:
@@ -183,7 +184,32 @@ int main()
     ofstream csv;
     apriCSV("results/risultati_demo.csv",csv);
 
-    Mat frame_input, frame_grigio, frame_output;
+    // ottengo larghezza e altezza dei frame provenienti dalla webcam 
+    int altezza = cap.get(CAP_PROP_FRAME_HEIGHT);
+    int larghezza = cap.get(CAP_PROP_FRAME_WIDTH);
+
+    // calcolo della dimensione del frame e bytes di allocamento 
+    size_t dim_frame = altezza*larghezza;
+    size_t allineamento = 128;
+    if(mod_scelta != Modalita::CPU_MODE)
+        allineamento = manager.getByteAllineamento();
+    size_t alloc_size = ((dim_frame+allineamento-1)/allineamento)*allineamento;
+
+    // puntatori a memoria allocata secondo l'allineamento richiesto 
+    void* ptr_in = aligned_alloc(allineamento,alloc_size);
+    void* ptr_out = aligned_alloc(allineamento,alloc_size);
+
+    if (!ptr_in || !ptr_out) 
+    {
+        cerr << "Errore allocazione memoria allineata" << endl;
+        if (ptr_in) free(ptr_in);
+        if (ptr_out) free(ptr_out);
+        return -1;
+    }
+
+    Mat frame_input; 
+    Mat frame_grigio(altezza,larghezza,CV_8UC1,ptr_in);
+    Mat frame_output(altezza,larghezza,CV_8UC1,ptr_out);
 
     // variabili per benchmark
     int conta_frame = 0; // per tenere traccia di quanti frame processati 
@@ -271,7 +297,12 @@ int main()
         if(waitKey(1)==27) break;
 
     }
+    
+    cap.release(); 
+    destroyAllWindows();
     csv.close();
+    free(ptr_in);
+    free(ptr_out);
     return 0;
     
 }
