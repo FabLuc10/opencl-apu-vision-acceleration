@@ -477,12 +477,14 @@ void OpenCLManager::runSobelZero(const cv::Mat& input, cv::Mat& output)
         size_t dim = input.total()*input.elemSize();
 
         /*
-            pattern per sincronizzazione zero-copy tra GPU e CPU
-            l'operazione di Map con CL_MAP_WRITE_INVALIDATE_REGION serve alla CPU a prendere il controllo del buffer
-            e a invalidare la cache GPU, risparmiando il tempo dovuto al flush delle cache GPU verso RAM.
-            l'Unmap forza la CPU a fare il flush delle cache verso la RAM passando il controllo del buffer alla GPU 
-            che andrà a leggere dalla RAM dati sicuramente aggiornati   
-        */
+            Pattern di sincronizzazione Zero-Copy per buffer creati con CL_MEM_USE_HOST_PTR.
+            L'operazione di Map con CL_MAP_WRITE_INVALIDATE_REGION avvisa il runtime OpenCL 
+            che l'host sovrascriverà l'intera regione, evitando il trasferimento inutile dei 
+            dati preesistenti dal device all'host. 
+            Il successivo Unmap immediato sincronizza la memoria di sistema (input.data) 
+            verso la GPU, cedendo al device il controllo esclusivo del buffer prima del kernel.
+        */   
+        
         void* ptr_in = queue.enqueueMapBuffer(input_gpu_zero,CL_TRUE,CL_MAP_WRITE_INVALIDATE_REGION,0,dim);
         queue.enqueueUnmapMemObject(input_gpu_zero, ptr_in);
 
@@ -498,9 +500,10 @@ void OpenCLManager::runSobelZero(const cv::Mat& input, cv::Mat& output)
         queue.enqueueNDRangeKernel(kernel_sobel,cl::NullRange,global_size);
 
         /*
-            Map con il flag CL_MAP_READ permette il flush delle cache GPU verso la RAM e invalida le cache CPU in modo tale 
-            che la CPU sia costretta ad andare a leggere i dati aggiornati dalla GPU su RAM.
-            L'Unmap passa il controllo del buffer alla GPU
+            Mappare in lettura con CL_MAP_READ forza il driver a invalidare le cache della CPU 
+            e ad assicurarsi che le scritture effettuate dalla GPU siano visibili nella RAM 
+            di sistema (aggiornando direttamente output.data di OpenCV).
+            L'Unmap immediato rilascia controllo sul buffer.
         */
         void* ptr_out = queue.enqueueMapBuffer(output_gpu_zero, CL_TRUE, CL_MAP_READ, 0, dim);
         queue.enqueueUnmapMemObject(output_gpu_zero, ptr_out);

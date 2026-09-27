@@ -167,7 +167,7 @@ int main()
     vector<Algoritmo> algoritmi = {Algoritmo::SOBEL, Algoritmo::BLUR, Algoritmo::EROSION, 
                                               Algoritmo::DILATION, Algoritmo::TRANSLATION, 
                                               Algoritmo::ROTATION, Algoritmo::SCALING};
-    vector<Modalita> modalita = { Modalita::GPU_ZERO,Modalita::GPU_STANDARD,Modalita::CPU_MODE};
+    vector<Modalita> modalita = {Modalita::CPU_MODE, Modalita::GPU_STANDARD, Modalita::GPU_ZERO};
 
     OpenCLManager manager;
     manager.buildPrograms("kernels/filtri.cl", "kernels/morfologia.cl", "kernels/geometria.cl");  
@@ -247,9 +247,9 @@ int main()
             return -1;
         }
         
-        for(Modalita mod : modalita)
+        for(Algoritmo algo : algoritmi)
         {
-            for(Algoritmo algo : algoritmi)
+            for(Modalita mod : modalita)
             {
                 if (primo)
                 {
