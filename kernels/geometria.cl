@@ -29,7 +29,7 @@ __kernel void translation(__global const uchar* input, __global uchar* output, i
 
 // ROTAZIONE 
 // x' = x cos(a) - y sen(a)
-// y' = x sen(a) + y sen(a)
+// y' = x sen(a) + y cos(a)
 
 uchar interpolazione_bilineare(__global const uchar*input, float x, float y, int rows, int cols)
 {
